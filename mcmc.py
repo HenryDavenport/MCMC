@@ -37,6 +37,7 @@ class MCMC:
     l2_visibility = 0.62
     l3_visibility = 0.075
 
+    save_middle_peak_parameters_only = False
 
     # public functions
     def import_data(self, filename, start, end):
@@ -46,21 +47,12 @@ class MCMC:
             data = hdul[0].data
 
         print(repr(hdr))
-        # npts = math.floor(length)
-        # start_pos = math.floor(start)
-        # print(start_pos)
-        # print(start_pos+npts)
-        # npts = end - start
         cad = self.cadence  # hdr['cadence'] #Spacing (in seconds) between data points
         vel = data[math.floor(start):math.floor(end)]
-        #hdul[0].data = vel
-        #hdul.writeto('GOLF_365days_110496_110497.fits')
 
         npts = len(vel)
         time = np.arange(0, npts * cad, cad)
 
-        # plt.plot(time, vel)
-        # plt.show()
         # load velocity data and then FFT to get frequency-power spectrum of the Sun
         fill = np.count_nonzero(vel) / (1.0 * len(vel))
         # apply normalisation so the power is per unit frequency.
@@ -430,6 +422,7 @@ class MCMC:
             l1 = list_ln_numbers_flattened[i][0]
             n1 = list_ln_numbers_flattened[i][1]
             identifier += f"l{l1}n{n1}_"
+
         output_template = ["l", "n", "freq", "freq error", "ln(power)", "ln(power) error", "splitting",
                            "splitting error",
                            "scale",
@@ -444,6 +437,7 @@ class MCMC:
         for peak in Final_Values_Errors:
             if "splitting" in peak:
                 splitting_list.append(peak["splitting"])
+
         # generate graph of data and fit and corner plots
         fig1, ax1 = plt.subplots()
         ax1.plot(freq_peaks1, power_peaks1, label="Simulated data")
@@ -862,6 +856,10 @@ class MCMC:
     def __write_to_file(self, filename, output_template, fit_values):
         """ writes the data in fit_values to filename with order of columns given by output template.
         background information is stored in position of dictionary."""
+        if save_middle_peak_parameters_only:
+            pos_centre_peak1 = len(fit_values)/2 - 1
+            fit_values = fit_values[pos_centre_peak1: pos_centre_peak1+1]
+
         if "background" in fit_values[0]:
             background = fit_values[0]["background"]
             if "background error" in fit_values[0]:
@@ -930,7 +928,3 @@ class MCMC:
                     label += " [$\mu$Hz]"
                 labels_final.append(label)
         return labels_final
-
-
-
-
