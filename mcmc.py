@@ -18,7 +18,7 @@ class MCMC:
     Different_Asymmetries = False
 
     parameters_kept_constant = ["scale"]
-    priors_filename = "Main_Fits_BiSON_8640d_lbest_UseInSolarCycle.dat"
+    priors_filename = "Priors.txt"
     Input_Priors_Columns = ["l", "n", "freq", "freq error", "splitting", "splitting error", "ln(width)",
                                  "ln(width) error", "ln(power)", "ln(power) error", "asymmetry", "asymmetry error",
                                  "background", "background error", "scale"]
