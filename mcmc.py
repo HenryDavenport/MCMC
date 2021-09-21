@@ -774,7 +774,7 @@ class MCMC:
 
     def lorentz(self, freq, central_freq, width, height, asymmetry):
         """function returns the values of the self.lorentzian peak across the freq range inputted"""
-        # height = pow / (0.5 * np.pi * width * 1e-6)
+        height = pow / (0.5 * np.pi * width * 1e-6)
         xi = (2 / width) * (freq - central_freq)
         model = (height / (1 + xi ** 2)) * ((1 + asymmetry * xi) ** 2 + asymmetry ** 2)
 
