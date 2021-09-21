@@ -330,7 +330,7 @@ class MCMC:
         sampler = emcee.EnsembleSampler(nwalkers, ndim, self.__log_probability,
                                         args=(
                                             freq_1, power_1, Par_List, Global_List, list_ln_numbers,
-                                            prior_range_dicts, varied_pars, constants_dict, pow_Win, initial_guess_list, prior_par_ranges_list))
+                                            constants_dict, initial_guess_list, prior_par_ranges_list, pow_Win))
         # repeats the sample procedure a maximum of x times
         x = 3
         for i in range(x):
@@ -800,7 +800,7 @@ class MCMC:
     # functions used by the MCMC sampler
     def __log_probability(self, theta, *args):
         """the probability function. This is directly called by emcee, the parameters that are varied are in theta."""
-        freq, power, Par_List, Global_List, list_ln, priors_list, input_data_dict, constant_dict, PowWin_short, initial_guess_list, prior_par_ranges_list = args
+        freq, power, Par_List, Global_List, list_ln, constant_dict, initial_guess_list, prior_par_ranges_list, PowWin_short = args
 
         # convert input parameters to dictionary
         theta_dict = self.__gen_dict_from_pars(theta, constant_dict, Par_List, Global_List, list_ln)
