@@ -612,22 +612,22 @@ class MCMC:
                     prior["linewidth error"] = peak["linewidth"]
             if int(peak["l"]) == 0:
                 Priors_l0 = {"freq": 3, "power": 5 * scaling * prior["power perc error"] * 1000,
-                             "linewidth": 20 * scaling * prior["linewidth error"],
+                             "linewidth": scaling * prior["linewidth error"],
                              "background": 1000000, "asymmetry": 300 * prior["asymmetry error"]}
             elif int(prior["l"]) == 1:
                 Priors_l1 = {"freq": 3, "splitting": scaling * prior["splitting error"],
                              "power": 5 * scaling * prior["power perc error"] * 1000,
-                             "linewidth": 10 * scaling * prior["linewidth error"], "background": 1000000,
+                             "linewidth": scaling * prior["linewidth error"], "background": 1000000,
                              "asymmetry": 300 * prior["asymmetry error"]}
             elif int(prior["l"]) == 2:
                 Priors_l2 = {"freq": 3, "splitting": scaling * prior["splitting error"],
                              "power": 5 * scaling * prior["power perc error"] * 1000,
-                             "linewidth": 20 * scaling * prior["linewidth error"], "scale": scaling * 0.01,
+                             "linewidth": scaling * prior["linewidth error"], "scale": scaling * 0.01,
                              "background": 1000000, "asymmetry": 300 * prior["asymmetry error"]}
             elif int(prior["l"]) == 3:
                 Priors_l3 = {"freq": 3, "splitting": scaling * prior["splitting error"],
                              "power": 5 * scaling * prior["power perc error"] * 1000,
-                             "linewidth": 10 * scaling * prior["linewidth error"], "scale": scaling * 0.01,
+                             "linewidth": scaling * prior["linewidth error"], "scale": scaling * 0.01,
                              "background": 1000000, "asymmetry": 300 * prior["asymmetry error"]}
         return [Priors_l0, Priors_l1, Priors_l2, Priors_l3]
 
@@ -729,7 +729,6 @@ class MCMC:
         window_function = [0.0 if i == 0.0 else 1.0 for i in vel_data]
         return window_function
 
-
     # functions used by the MCMC sampler
     def __log_probability(self, theta, *args):
         """the probability function. This is directly called by emcee, the parameters that are varied are in theta."""
@@ -759,7 +758,7 @@ class MCMC:
             keys = [key for key in peak_theta if key in priors_list[int(peak_theta["l"])].keys() and key in peak_true]
 
             for key in keys:
-                if key not in Par_List_Flattened and key not in Global_List:
+                if key not in Par_List_Flattened and not any(key in ele for ele in Global_List):
                     continue
                 if key != "asymmetry":
                     if peak_theta[key] < 0:
@@ -770,6 +769,10 @@ class MCMC:
 
     def __log_likelihood(self, dict1, freq, measured, PowWin_short = None ):
         model = self.all_peaks_model(freq, dict1, PowWin_short)
+        for m in model:
+            if m < 0:
+                plt.plot(freq, model)
+                plt.show()
         return -np.sum(np.log(model) + measured / model)
 
     def lorentz(self, freq, central_freq, width, pow, asymmetry):
@@ -804,7 +807,7 @@ class MCMC:
 
             elif peak_Dict["l"] == 1:
                 # create 2 peaks for m+-1:
-                visibility = 1.505
+                visibility = self.l1_visibility
                 model += self.lorentz(freq, peak_Dict["freq"] + peak_Dict["splitting"], peak_Dict["linewidth"],
                                  visibility * peak_Dict["power"] / 2, asymmetry)
                 model += self.lorentz(freq, peak_Dict["freq"] - peak_Dict["splitting"], peak_Dict["linewidth"],
@@ -813,7 +816,7 @@ class MCMC:
             elif peak_Dict["l"] == 2:
                 # create 3 peaks for m=+-2, 0
                 # create m+-2 peaks:
-                visibility = 0.62
+                visibility = self.l2_visibility
                 scaling = 2 + peak_Dict["scale"]
                 model += self.lorentz(freq, peak_Dict["freq"] + 2 * peak_Dict["splitting"], peak_Dict["linewidth"],
                                  visibility * peak_Dict["power"] / scaling, asymmetry)
@@ -826,7 +829,7 @@ class MCMC:
             elif peak_Dict["l"] == 3:
                 # create 4 peaks for m+-1, m+-3
                 # create m+-3 peaks:
-                visibility = 0.075
+                visibility = self.l3_visibility
                 scaling = 2 + 2 * peak_Dict["scale"]
                 model += self.lorentz(freq, peak_Dict["freq"] + 3 * peak_Dict["splitting"], peak_Dict["linewidth"],
                                  visibility * peak_Dict["power"] / scaling, asymmetry)
