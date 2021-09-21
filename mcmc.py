@@ -2,6 +2,7 @@ import math
 import multiprocessing
 import os
 import time
+import copy
 
 import corner
 import emcee
@@ -38,6 +39,10 @@ class MCMC:
     l3_visibility = 0.075
 
     save_middle_peak_parameters_only = False
+
+    background_initial_guess = 500000
+
+    check_priors = False
 
     # public functions
     def import_data(self, filename, start, end):
@@ -275,6 +280,11 @@ class MCMC:
         # correct initial powers of the peaks
         if "power" not in pars_constant:
             varied_pars = self.__correct_powers(initial_guess_pars, freq_1, power_1)
+
+        # correct background term:
+        for i in range(len(initial_guess_pars)):
+            initial_guess_pars[i]["background"] = self.background_initial_guess
+
         # separate into constants and parameters to be fitted.
         varied_pars, constants_dict = self.__find_constant_parameters(initial_guess_pars, pars_constant)
         # generates the list of parameter labels of the parameters that are going to be fitted.
@@ -283,27 +293,44 @@ class MCMC:
         print(Par_List)
         print(Global_List)
         print("________PRIORS READ FROM FILE_________")
-        prior_par_ranges_dicts = self.__generate_priors(prior_dict, initial_guess_pars_copy)
-        print(prior_par_ranges_dicts)
+        prior_range_dicts = self.__generate_priors(prior_dict, initial_guess_pars_copy)
+        print(prior_range_dicts)
         print("_________ LIST OF INITIAL PARAMETER VALUES _________")
         initial_guess_list = self.__gen_par_values(varied_pars, Par_List, Global_List)
         nwalkers = 100
         ndim = len(initial_guess_list)
 
         print(initial_guess_list)
+
+        # add l and n number labels to prior dictionaries
+        for i in range(len(prior_range_dicts)):
+            l = list_ln_numbers_flat[i][0]
+            n = list_ln_numbers_flat[i][1]
+            prior_range_dicts[i]["l"] = l
+            prior_range_dicts[i]["n"] = n
+
+
         # generate initial positions of walkers first:
-        prior_par_ranges_list = self.__gen_par_values([prior_par_ranges_dicts[int(l)] for [l, n] in list_ln_numbers_flat], Par_List,
+        prior_par_ranges_list = self.__gen_prior_ranges(prior_range_dicts, Par_List,
                                                Global_List)
-        print(prior_par_ranges_list)
+        # pos = initial_guess_list + 1e-6 * np.array(prior_par_ranges_list) * np.random.randn(nwalkers, ndim)
 
-        pos = initial_guess_list + 1e-7 * np.array(prior_par_ranges_list) * np.random.randn(nwalkers, ndim)
+        pos = initial_guess_list + prior_par_ranges_list * np.random.uniform(-1.0, 1.0, size=(nwalkers, ndim))
 
-        print(constants_dict)
+        if self.check_priors:
+            for i in range(len(initial_guess_list)):
+                freqs = [listy[i] for listy in pos]
+                plt.plot(freqs)
+                plt.hlines(initial_guess_list[i], 0, len(freqs))
+                plt.hlines(initial_guess_list[i]-prior_par_ranges_list[i], 0, len(freqs))
+                plt.hlines(initial_guess_list[i]+prior_par_ranges_list[i], 0, len(freqs))
+                plt.show()
+
         # initialise the sampler
         sampler = emcee.EnsembleSampler(nwalkers, ndim, self.__log_probability,
                                         args=(
                                             freq_1, power_1, Par_List, Global_List, list_ln_numbers,
-                                            prior_par_ranges_dicts, varied_pars, constants_dict, pow_Win))
+                                            prior_range_dicts, varied_pars, constants_dict, pow_Win, initial_guess_list, prior_par_ranges_list))
         # repeats the sample procedure a maximum of x times
         x = 3
         for i in range(x):
@@ -605,31 +632,73 @@ class MCMC:
         """function that takes as an input the dictionary of prior error values and the actual initial guess values
         outputs the list of priors for each peak with appropriate scaling."""
         scaling = 150
+        priors = []
         Priors_l0 = Priors_l1 = Priors_l2 = Priors_l3 = []
         for prior, peak in zip(prior_dict, peak_dict):
             if "linewidth" in peak:
                 if peak["linewidth"] < prior["linewidth error"]:
-                    prior["linewidth error"] = peak["linewidth"]
+                    prior["linewidth error"] = peak["linewidth"] * 0.9
+                    print("HERE")
             if int(peak["l"]) == 0:
                 Priors_l0 = {"freq": 3, "power": 5 * scaling * prior["power perc error"] * 1000,
-                             "linewidth": scaling * prior["linewidth error"],
-                             "background": 1000000, "asymmetry": 300 * prior["asymmetry error"]}
+                             "linewidth": 2 * prior["linewidth error"],
+                             "background": self.background_initial_guess/4, "asymmetry": 0.5}
+                priors.append(Priors_l0)
             elif int(prior["l"]) == 1:
-                Priors_l1 = {"freq": 3, "splitting": scaling * prior["splitting error"],
+                Priors_l1 = {"freq": 3, "splitting": 0.2,
                              "power": 5 * scaling * prior["power perc error"] * 1000,
-                             "linewidth": scaling * prior["linewidth error"], "background": 1000000,
-                             "asymmetry": 300 * prior["asymmetry error"]}
+                             "linewidth": 2 * prior["linewidth error"], "background": self.background_initial_guess/4,
+                             "asymmetry": 0.5}
+                priors.append(Priors_l1)
             elif int(prior["l"]) == 2:
-                Priors_l2 = {"freq": 3, "splitting": scaling * prior["splitting error"],
+                Priors_l2 = {"freq": 3, "splitting": 0.2,
                              "power": 5 * scaling * prior["power perc error"] * 1000,
-                             "linewidth": scaling * prior["linewidth error"], "scale": scaling * 0.01,
-                             "background": 1000000, "asymmetry": 300 * prior["asymmetry error"]}
+                             "linewidth": 2 * prior["linewidth error"], "scale": scaling * 0.01,
+                             "background": self.background_initial_guess/4, "asymmetry": 0.5}
+                priors.append(Priors_l2)
+
             elif int(prior["l"]) == 3:
-                Priors_l3 = {"freq": 3, "splitting": scaling * prior["splitting error"],
+                Priors_l3 = {"freq": 3, "splitting": 0.2,
                              "power": 5 * scaling * prior["power perc error"] * 1000,
-                             "linewidth": scaling * prior["linewidth error"], "scale": scaling * 0.01,
-                             "background": 1000000, "asymmetry": 300 * prior["asymmetry error"]}
-        return [Priors_l0, Priors_l1, Priors_l2, Priors_l3]
+                             "linewidth": 2 * prior["linewidth error"], "scale": scaling * 0.01,
+                             "background": self.background_initial_guess/4, "asymmetry": 0.5}
+                priors.append(Priors_l3)
+
+        return priors
+
+    def __gen_prior_ranges(self, dict_list, listPar, list_Global):
+        """ takes in list of names of parameters to be fitted
+                 and returns an array with the value (from dict_list) for each one."""
+        list_par_values = []
+        for (keys, peak) in zip(listPar, dict_list):
+            for key in keys:
+                list_par_values.append(peak[key])
+        # cycle through global variables
+        if len(list_Global) != 0:
+            for key in list_Global:
+                if "linewidth" in key:
+                    numbers = key[10:]
+                    l, n = [float(s) for s in numbers.split("_")]
+                    for peak in dict_list:
+                        if peak["l"] == l and peak["n"] == n:
+                            list_par_values.append(peak["linewidth"])
+                            break
+
+                if "asymmetry" in key:
+                    numbers = key[10:]
+                    l, n = [float(s) for s in numbers.split("_")]
+                    for peak in dict_list:
+                        if peak["l"] == l and peak["n"] == n:
+                            list_par_values.append(peak["asymmetry"])
+                            break
+
+                if "background" in key:
+                    # picks initial value from first input peak
+                    # list_par_values.append(dict_list[0]["background"])
+                    list_par_values.append(self.background_initial_guess)
+
+        return np.array(list_par_values)
+
 
     def __gen_par_values(self, dict_list, listPar, list_Global):
         """ takes in list of names of parameters to be fitted
@@ -643,7 +712,6 @@ class MCMC:
             for key in list_Global:
                 if "asymmetry" in key:
                     for peak in dict_list:
-                        print(peak)
                         if "l" in peak:
                             peak_identifier = str(peak["l"])+"_"+str(peak["n"])
                             if peak_identifier in key:
@@ -651,11 +719,10 @@ class MCMC:
                                 break
                         else:
                             # for if looking at prior ranges
-                            list_par_values.append(peak["linewidth"])
+                            list_par_values.append(peak["asymmetry"])
                             break
                 if "linewidth" in key:
                     for peak in dict_list:
-                        print(peak)
                         if "l" in peak:
                             peak_identifier = str(peak["l"]) + "_" + str(peak["n"])
                             if peak_identifier in key:
@@ -668,13 +735,14 @@ class MCMC:
 
                 if "background" in key:
                     # picks initial value from first input peak
-                    list_par_values.append(dict_list[0]["background"])
+                    # list_par_values.append(dict_list[0]["background"])
+                    list_par_values.append(self.background_initial_guess)
+
         return list_par_values
 
     def __gen_dict_from_pars(self, theta, constant_dict, Par_List, Global_List, list_ln):
-        """ does opposite of gen_par_values(): converts the input list of parameters and set of parameters
+        """ does opposite of __gen_par_values(): converts the input list of parameters and set of parameters
          back into a dictionary for easy recall for later functions"""
-
         Global_dict = {}
         if len(Global_List) != 0:
             Global_bit = theta[-len(Global_List):]
@@ -732,39 +800,24 @@ class MCMC:
     # functions used by the MCMC sampler
     def __log_probability(self, theta, *args):
         """the probability function. This is directly called by emcee, the parameters that are varied are in theta."""
-        freq, power, Par_List, Global_List, list_ln, priors_list, input_data_dict, constant_dict, PowWin_short = args
+        freq, power, Par_List, Global_List, list_ln, priors_list, input_data_dict, constant_dict, PowWin_short, initial_guess_list, prior_par_ranges_list = args
 
         # convert input parameters to dictionary
         theta_dict = self.__gen_dict_from_pars(theta, constant_dict, Par_List, Global_List, list_ln)
-        lp = self.__log_prior(theta_dict, input_data_dict, priors_list, Par_List, Global_List)
+        lp = self.__log_prior(theta, initial_guess_list, prior_par_ranges_list)
         # if log of prior is neg infinity then full log probability function must be too
         if not np.isfinite(lp):
             return -np.inf
         return lp + self.__log_likelihood(theta_dict, freq, power, PowWin_short)
 
-    def __log_prior(self, theta_dict, input_data_dict, priors_list, Par_List, Global_List):
+    def __log_prior(self, thetas, inputs, priors):
         """ prior function called by log_probability().
         Returns negative infinity if any of the parameter values
             are outside the priors. Uses uniform priors currently."""
 
-        Par_List_Flattened = [item for sublist in Par_List for item in sublist]
-
-        if self.Fit_Background and "background" in Global_List:
-            key = "background"
-            if abs(theta_dict[0][key] - input_data_dict[0][key]) > priors_list[int(theta_dict[0]["l"])][key] or \
-                    theta_dict[0][key] < 0:
+        for (theta, input, prior) in zip(thetas, inputs, priors):
+            if abs(theta - input) > prior:
                 return -np.inf
-        for (peak_theta, peak_true) in zip(theta_dict, input_data_dict):
-            keys = [key for key in peak_theta if key in priors_list[int(peak_theta["l"])].keys() and key in peak_true]
-
-            for key in keys:
-                if key not in Par_List_Flattened and not any(key in ele for ele in Global_List):
-                    continue
-                if key != "asymmetry":
-                    if peak_theta[key] < 0:
-                        return -np.inf
-                if abs(peak_theta[key] - peak_true[key]) > priors_list[int(peak_theta["l"])][key]:
-                    return -np.inf
         return 0
 
     def __log_likelihood(self, dict1, freq, measured, PowWin_short = None ):
@@ -794,6 +847,8 @@ class MCMC:
         if self.Fit_Background:
             if "background" in theta_dict[0]:
                 shift = self.background(theta_dict[0]["background"])
+        else:
+            shift = 0
 
         for peak_Dict in theta_dict:
             if not self.Fit_Asymmetric:
@@ -859,7 +914,7 @@ class MCMC:
     def __write_to_file(self, filename, output_template, fit_values):
         """ writes the data in fit_values to filename with order of columns given by output template.
         background information is stored in position of dictionary."""
-        if save_middle_peak_parameters_only:
+        if self.save_middle_peak_parameters_only:
             pos_centre_peak1 = len(fit_values)/2 - 1
             fit_values = fit_values[pos_centre_peak1: pos_centre_peak1+1]
 
