@@ -13,12 +13,17 @@ from matplotlib import pyplot as plt
 
 class MCMC:
     # useful parameters to change:
+    # each l=0,2 or l=1,3 pair fitted with same or different linewidths
     Different_Widths = False
+    # fit a simple linear background shift
     Fit_Background = True
+    # Fit asymmetric lorentzians (not symmetric)
     Fit_Asymmetric = True
+    # fit each peak in each l=0,2 and l=1,3 pair with different widths
     Different_Asymmetries = False
 
     parameters_kept_constant = ["scale"]
+
     priors_filename = "Priors.txt"
     Input_Priors_Columns = ["l", "n", "freq", "freq error", "splitting", "splitting error", "ln(width)",
                                  "ln(width) error", "ln(power)", "ln(power) error", "asymmetry", "asymmetry error",
@@ -40,8 +45,10 @@ class MCMC:
 
     save_middle_peak_parameters_only = False
 
+    # the guess of the background
     background_initial_guess = 500000
 
+    # set to display the initial positions of all the walkers each peak run.
     check_priors = False
 
     # public functions
@@ -108,7 +115,7 @@ class MCMC:
         return folder_name
 
     def fit_all_peaks(self, power, freq, foldername, freq_range=(2000, 3500), pars_constant=parameters_kept_constant,
-                      splitting=0.40, modes_per_fit = 1, window_width = 25, pow_win = None):
+                      splitting=0.40, modes_per_fit=1, window_width=25, pow_win=None):
         """Sets up priors and frequency power spectrum and then runs the fitting over all pairs of peaks
         """
         # import the initial guess values from the priors filename
@@ -120,12 +127,18 @@ class MCMC:
         manager = multiprocessing.Manager()
         return_value_list = manager.list()
         lock = multiprocessing.Lock()
-        # find all peaks in the frequency range:
-        list_of_peaks_in_range = []
-        for [peak1, peak2] in paired_dict:
-            if freq_range[0] < peak1["freq"] < freq_range[1]:
-                list_of_peaks_in_range.append([peak1, peak2])
-        list_of_peaks_in_range = sorted(list_of_peaks_in_range, key=lambda x: x[0]["freq"])
+        # find all peaks in the frequency range requested:
+        paired_freq_ordered = sorted(paired_dict, key=lambda x: x[0]["freq"])
+        first_peak_index = next((i for i, item in enumerate(paired_freq_ordered) if freq_range[0] < item[0]["freq"]), None)
+        last_peak_index = next((i-1 for i, item in enumerate(paired_freq_ordered) if freq_range[1] < item[0]["freq"]), None)
+
+        # add the edge peaks below the lowest in the frequency range so all peaks in the range are fitted
+        # only want to do this if number of modes per fit is larger than 1 and are only wanting to save middle
+        if self.save_middle_peak_parameters_only and modes_per_fit > 1:
+            first_peak_index -= math.floor(modes_per_fit/2)
+            last_peak_index += math.floor(modes_per_fit/2)
+
+        list_of_peaks_in_range = paired_freq_ordered[first_peak_index: last_peak_index+1]
 
         # this seperates the peaks into the groups that are to be fitted together, e.g. if want to fit the peaks either
         # side of peak of interest.
@@ -160,6 +173,8 @@ class MCMC:
             # make array length even (needed to use the window function for BiSON)
             if (UpperPos - LowerPos) % 2 != 0:
                 UpperPos += 1
+
+            # create freq and power arrays for fitting window
             freq_peaks = freq[LowerPos: UpperPos]
             power_peaks = power[LowerPos: UpperPos]
             # only needed for if BiSON fit make width of window even
@@ -192,7 +207,7 @@ class MCMC:
             processes = []
             time.sleep(1)
 
-        # calculate average splitting value
+        # calculate average splitting value in case needed for second run
         list_of_splitting = []
         for x in return_value_list:
             for y in x:
@@ -207,7 +222,9 @@ class MCMC:
     def import_priors(self, location, column_titles):
         """imports priors from file location from table with columns given by column_titles
         returns a list of the l and n numbers in the priors and a list of dictionaries of the data for each peak"""
+        # import priors from file as a list of lists (one row for each peak)
         input_priors = np.loadtxt(location)
+
         # add extra data for scale height of m split components
         input_data_proc = []
         for peak in input_priors:
@@ -272,7 +289,6 @@ class MCMC:
         :param pars_constant: parameters that are kept constant in the fit
         :param prior_dict: gives errors on the fit values in the priors, used to define the width of the priors
         :param pow_Win: the window function used if the fit is for BiSON
-        :return:
         """
         initial_guess_pars_copy = [elem for elem in initial_guess_pars]
         list_ln_numbers_flat = [item for sublist in list_ln_numbers for item in sublist]
@@ -299,7 +315,6 @@ class MCMC:
         initial_guess_list = self.__gen_par_values(varied_pars, Par_List, Global_List)
         nwalkers = 100
         ndim = len(initial_guess_list)
-
         print(initial_guess_list)
 
         # add l and n number labels to prior dictionaries
@@ -309,14 +324,12 @@ class MCMC:
             prior_range_dicts[i]["l"] = l
             prior_range_dicts[i]["n"] = n
 
-
-        # generate initial positions of walkers first:
+        # generate initial positions of walkers:
         prior_par_ranges_list = self.__gen_prior_ranges(prior_range_dicts, Par_List,
                                                Global_List)
-        # pos = initial_guess_list + 1e-6 * np.array(prior_par_ranges_list) * np.random.randn(nwalkers, ndim)
-
         pos = initial_guess_list + prior_par_ranges_list * np.random.uniform(-1.0, 1.0, size=(nwalkers, ndim))
 
+        # plot all initial walker positions if check priors True
         if self.check_priors:
             for i in range(len(initial_guess_list)):
                 freqs = [listy[i] for listy in pos]
@@ -382,6 +395,7 @@ class MCMC:
 
         # Get Samples
         samples = sampler.flatchain
+
         best_non_log_values = samples[np.argmax(sampler.flatlnprobability)]
         Final_Values_Dict_non_log = self.__gen_dict_from_pars(best_non_log_values, constants_dict, Par_List, Global_List, list_ln_numbers)
         log_samples = []
@@ -642,26 +656,26 @@ class MCMC:
             if int(peak["l"]) == 0:
                 Priors_l0 = {"freq": 3, "power": 5 * scaling * prior["power perc error"] * 1000,
                              "linewidth": 2 * prior["linewidth error"],
-                             "background": self.background_initial_guess/4, "asymmetry": 0.5}
+                             "background": self.background_initial_guess/2, "asymmetry": 0.5}
                 priors.append(Priors_l0)
             elif int(prior["l"]) == 1:
                 Priors_l1 = {"freq": 3, "splitting": 0.2,
                              "power": 5 * scaling * prior["power perc error"] * 1000,
-                             "linewidth": 2 * prior["linewidth error"], "background": self.background_initial_guess/4,
+                             "linewidth": 2 * prior["linewidth error"], "background": self.background_initial_guess/2,
                              "asymmetry": 0.5}
                 priors.append(Priors_l1)
             elif int(prior["l"]) == 2:
                 Priors_l2 = {"freq": 3, "splitting": 0.2,
                              "power": 5 * scaling * prior["power perc error"] * 1000,
                              "linewidth": 2 * prior["linewidth error"], "scale": scaling * 0.01,
-                             "background": self.background_initial_guess/4, "asymmetry": 0.5}
+                             "background": self.background_initial_guess/2, "asymmetry": 0.5}
                 priors.append(Priors_l2)
 
             elif int(prior["l"]) == 3:
                 Priors_l3 = {"freq": 3, "splitting": 0.2,
                              "power": 5 * scaling * prior["power perc error"] * 1000,
                              "linewidth": 2 * prior["linewidth error"], "scale": scaling * 0.01,
-                             "background": self.background_initial_guess/4, "asymmetry": 0.5}
+                             "background": self.background_initial_guess/2, "asymmetry": 0.5}
                 priors.append(Priors_l3)
 
         return priors
@@ -836,7 +850,7 @@ class MCMC:
 
         return model
 
-    def background(self, height): # TODO add background function
+    def background(self, height):
         """ returns the background function. At the moment uniform linear offset"""
         return height
 
@@ -909,14 +923,13 @@ class MCMC:
         model += shift
         return model
 
-
     # functions used to generate the output graphs and write fit parameters to file
     def __write_to_file(self, filename, output_template, fit_values):
         """ writes the data in fit_values to filename with order of columns given by output template.
         background information is stored in position of dictionary."""
         if self.save_middle_peak_parameters_only:
-            pos_centre_peak1 = len(fit_values)/2 - 1
-            fit_values = fit_values[pos_centre_peak1: pos_centre_peak1+1]
+            pos_centre_peak1 = math.floor(len(fit_values)/2 - 1)
+            fit_values = fit_values[pos_centre_peak1: pos_centre_peak1+2]
 
         if "background" in fit_values[0]:
             background = fit_values[0]["background"]
@@ -937,7 +950,7 @@ class MCMC:
                             output_list.append(str(error))
                     else:
                         output_list.append(str(peak_values[key]))
-                elif key == "background": # TODO fix here
+                elif key == "background":
                     output_list.append(str(background))
                 elif key == "background error":
                     for error in background_error:
@@ -954,12 +967,14 @@ class MCMC:
                 f.write("\n")
         return True
 
-    def __get_errors(self, samples, final_fit_values):
+    def __get_errors(self, samples, final_values):
         """uses percentiles to get errors on the sample best values."""
         errors = []
+        values = []
         for i in range(len(samples[0])):
-            mcmc = np.percentile(samples[:, i], [16, 50, 84])
-            q = np.diff(mcmc)
+            percs= np.percentile(samples[:, i], [16, 50, 84])
+            percs[1] = final_values[i]
+            q = np.diff(percs)
             errors.append([q[0], q[1]])
         return errors
 
