@@ -647,12 +647,11 @@ class MCMC:
         outputs the list of priors for each peak with appropriate scaling."""
         scaling = 150
         priors = []
-        Priors_l0 = Priors_l1 = Priors_l2 = Priors_l3 = []
         for prior, peak in zip(prior_dict, peak_dict):
             if "linewidth" in peak:
-                if peak["linewidth"] < prior["linewidth error"]:
-                    prior["linewidth error"] = peak["linewidth"] * 0.9
-                    print("HERE")
+                # sometimes 2 * error in priors.txt is greater than the linewidth
+                if peak["linewidth"] < 2 * prior["linewidth error"]:
+                    prior["linewidth error"] = peak["linewidth"] * 0.5
             if int(peak["l"]) == 0:
                 Priors_l0 = {"freq": 3, "power": 5 * scaling * prior["power perc error"] * 1000,
                              "linewidth": 2 * prior["linewidth error"],
@@ -678,6 +677,12 @@ class MCMC:
                              "background": self.background_initial_guess/2, "asymmetry": 0.5}
                 priors.append(Priors_l3)
 
+        # check and correct if the prior range goes negative (for all but asymmetry which can be negative)
+        for prior, peak in zip(priors, peak_dict):
+            for key in prior:
+                if "asymmetry" not in key and "scale" not in key:
+                    if prior[key] > peak[key]:
+                        prior[key] = copy.deepcopy(peak[key])
         return priors
 
     def __gen_prior_ranges(self, dict_list, listPar, list_Global):
