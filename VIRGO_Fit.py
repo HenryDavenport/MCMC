@@ -21,6 +21,9 @@ if __name__ == '__main__':
 
     mcmc.save_middle_peak_parameters_only = True
 
+    mcmc.burnin = 1000
+    mcmc.no_samples = 10000
+
     # This is the number of seconds in a year divided by the cadence
     # Total number of measurements in a year
     year_npts = 525600
@@ -37,10 +40,12 @@ if __name__ == '__main__':
         folder_name = mcmc.create_directory()
         # first run low frequency (2000 to 3300 micro-Hz) peaks with just the scale parameter constant
         mcmc.parameters_kept_constant = ["scale"]
+        mcmc.Different_Widths = True
         average_splitting = mcmc.fit_all_peaks(power, freq, folder_name, pars_constant=mcmc.parameters_kept_constant,
-                                               freq_range=(2000, 3400), modes_per_fit=3)
+                                               freq_range=(2500, 3400), modes_per_fit=3)
         # Run high frequency peaks with scale and splitting constant.
         # splitting is set to average of splittings for all low frequency fits.
-        parameters_kept_constant = ["scale", "splitting"]
+        mcmc.parameters_kept_constant = ["scale", "splitting"]
+        mcmc.Different_Widths = False
         mcmc.fit_all_peaks(power, freq, folder_name, pars_constant=mcmc.parameters_kept_constant,
-                           freq_range=(3300, 4000), splitting=average_splitting, modes_per_fit=3)
+                           freq_range=(3400, 4000), splitting=average_splitting, modes_per_fit=3)
