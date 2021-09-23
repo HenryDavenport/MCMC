@@ -347,7 +347,7 @@ class MCMC:
                                             freq_1, power_1, Par_List, Global_List, list_ln_numbers,
                                             constants_dict, initial_guess_list, prior_par_ranges_list, pow_Win))
         # repeats the sample procedure a maximum of x times
-        x = 1
+        x = 3
         for i in range(x):
             # Run burn-in phase
             state = sampler.run_mcmc(pos, self.burnin, progress=True)
