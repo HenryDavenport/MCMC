@@ -246,6 +246,8 @@ class MCMC:
             prior_peaks_list[i]["linewidth error"] = abs(
                 np.exp(prior_peaks_list[i]["ln(width)"] + prior_peaks_list[i]["ln(width) error"]) - np.exp(
                     prior_peaks_list[i]["ln(width)"]))
+            if prior_peaks_list[i]["l"] == 3.0:
+                prior_peaks_list[i]["linewidth"] *= 3
             # generate power errors
             prior_peaks_list[i]["power"] = np.exp(prior_peaks_list[i]["ln(power)"])
             prior_peaks_list[i]["power perc error"] = 100 * abs(
@@ -345,7 +347,7 @@ class MCMC:
                                             freq_1, power_1, Par_List, Global_List, list_ln_numbers,
                                             constants_dict, initial_guess_list, prior_par_ranges_list, pow_Win))
         # repeats the sample procedure a maximum of x times
-        x = 3
+        x = 1
         for i in range(x):
             # Run burn-in phase
             state = sampler.run_mcmc(pos, self.burnin, progress=True)
@@ -418,7 +420,7 @@ class MCMC:
     def __save_all_output_data(self, Final_Fit_Values_log, Final_Values_Dict_non_log, Global_List, Par_List,
                                constants_dict, folder_name, freq_peaks1, list_ln_numbers, lock, log_samples,
                                power_peaks1):
-        """Use final fit values and samples to generate graphs and save the fit parameters and errors to file"""
+        """Use final fit values and samples to generate graphs and save the fit parameters and errors to file""" 
         Par_List_Logs = []
         for peak in Par_List:
             temp = []
@@ -572,7 +574,7 @@ class MCMC:
             data_around_peak = power[lower_peak_bound: higher_peak_bound]
             average_height = np.mean(data_around_peak)
             # convert to power
-            power_estimate = average_height #* (0.5 * np.pi * peak["linewidth"] * 1e-6)
+            power_estimate = average_height * (0.5 * np.pi * peak["linewidth"] * 1e-6)
             if peak["l"] == 1.0:
                 power_estimate /= self.l1_visibility
                 power_estimate /= 0.7
@@ -648,39 +650,35 @@ class MCMC:
         scaling = 150
         priors = []
         for prior, peak in zip(prior_dict, peak_dict):
-            if "linewidth" in peak:
-                # sometimes 2 * error in priors.txt is greater than the linewidth
-                if peak["linewidth"] < 2 * prior["linewidth error"]:
-                    prior["linewidth error"] = peak["linewidth"] * 0.5
             if int(peak["l"]) == 0:
                 Priors_l0 = {"freq": 3, "power": 5 * scaling * prior["power perc error"] * 1000,
-                             "linewidth": 2 * prior["linewidth error"],
+                             "linewidth": 40 * prior["linewidth error"],
                              "background": self.background_initial_guess/2, "asymmetry": 0.5}
                 priors.append(Priors_l0)
             elif int(prior["l"]) == 1:
-                Priors_l1 = {"freq": 3, "splitting": 0.2,
+                Priors_l1 = {"freq": 3, "splitting": 0.4,
                              "power": 5 * scaling * prior["power perc error"] * 1000,
-                             "linewidth": 2 * prior["linewidth error"], "background": self.background_initial_guess/2,
+                             "linewidth": 40 * prior["linewidth error"], "background": self.background_initial_guess/2,
                              "asymmetry": 0.5}
                 priors.append(Priors_l1)
             elif int(prior["l"]) == 2:
-                Priors_l2 = {"freq": 3, "splitting": 0.2,
+                Priors_l2 = {"freq": 3, "splitting": 0.4,
                              "power": 5 * scaling * prior["power perc error"] * 1000,
-                             "linewidth": 2 * prior["linewidth error"], "scale": scaling * 0.01,
+                             "linewidth": 40 * prior["linewidth error"], "scale": scaling * 0.01,
                              "background": self.background_initial_guess/2, "asymmetry": 0.5}
                 priors.append(Priors_l2)
 
             elif int(prior["l"]) == 3:
-                Priors_l3 = {"freq": 3, "splitting": 0.2,
+                Priors_l3 = {"freq": 3, "splitting": 0.4,
                              "power": 5 * scaling * prior["power perc error"] * 1000,
-                             "linewidth": 2 * prior["linewidth error"], "scale": scaling * 0.01,
+                             "linewidth": 40 * prior["linewidth error"], "scale": scaling * 0.01,
                              "background": self.background_initial_guess/2, "asymmetry": 0.5}
                 priors.append(Priors_l3)
 
         # check and correct if the prior range goes negative (for all but asymmetry which can be negative)
         for prior, peak in zip(priors, peak_dict):
             for key in prior:
-                if "asymmetry" not in key and "scale" not in key:
+                if key in peak and "asymmetry" not in key:
                     if prior[key] > peak[key]:
                         prior[key] = copy.deepcopy(peak[key])
         return priors
@@ -841,10 +839,6 @@ class MCMC:
 
     def __log_likelihood(self, dict1, freq, measured, PowWin_short = None ):
         model = self.all_peaks_model(freq, dict1, PowWin_short)
-        for m in model:
-            if m < 0:
-                plt.plot(freq, model)
-                plt.show()
         return -np.sum(np.log(model) + measured / model)
 
     def lorentz(self, freq, central_freq, width, pow, asymmetry):
@@ -852,7 +846,6 @@ class MCMC:
         height = pow / (0.5 * np.pi * width * 1e-6)
         xi = (2 / width) * (freq - central_freq)
         model = (height / (1 + xi ** 2)) * ((1 + asymmetry * xi) ** 2 + asymmetry ** 2)
-
         return model
 
     def background(self, height):
