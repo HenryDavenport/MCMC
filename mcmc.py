@@ -100,11 +100,11 @@ class MCMC:
         freq = 1e6 * np.fft.rfftfreq(npts, d=cad)
         return power, freq, powWin
 
-    def create_directory(self):
+    def create_directory(self, label):
         """Creates directory for output of fitting"""
         t = time.localtime()
         current_time = time.strftime("%H_%M_%S", t)
-        folder_name = f"Output_{current_time}"
+        folder_name = f"Output_{label}_{current_time}"
         # define the name of the directory to be created
         try:
             os.mkdir(folder_name)
@@ -246,13 +246,18 @@ class MCMC:
             prior_peaks_list[i]["linewidth error"] = abs(
                 np.exp(prior_peaks_list[i]["ln(width)"] + prior_peaks_list[i]["ln(width) error"]) - np.exp(
                     prior_peaks_list[i]["ln(width)"]))
-            if prior_peaks_list[i]["l"] == 3.0:
-                prior_peaks_list[i]["linewidth"] *= 3
+            
+            # if virgo make it wider as linewidths a lot wider than for BiSON
+            prior_peaks_list[i]["linewidth"] *= 5
+
             # generate power errors
             prior_peaks_list[i]["power"] = np.exp(prior_peaks_list[i]["ln(power)"])
             prior_peaks_list[i]["power perc error"] = 100 * abs(
                 np.exp(prior_peaks_list[i]["ln(power)"] + prior_peaks_list[i]["ln(power) error"])
                 - np.exp(prior_peaks_list[i]["ln(power)"])) / prior_peaks_list[i]["power"]
+            
+            # if virgo make it wider as linewidths a lot wider than for BiSON
+            prior_peaks_list[i]["power"] *= 5
 
         return list_ln_values, prior_peaks_list
 
@@ -398,7 +403,8 @@ class MCMC:
         # Get Samples
         samples = sampler.flatchain
 
-        best_non_log_values = samples[np.argmax(sampler.flatlnprobability)]
+        best_non_log_values = self.__get_errors(samples)[0]
+        #samples[np.argmax(sampler.flatlnprobability)]
         Final_Values_Dict_non_log = self.__gen_dict_from_pars(best_non_log_values, constants_dict, Par_List, Global_List, list_ln_numbers)
         log_samples = []
         labels = [item for sublist in Par_List for item in sublist]
@@ -447,7 +453,7 @@ class MCMC:
             for label in peak:
                 peak_temp.append(label + " error")
             Par_List_Logs_errors.append(peak_temp)
-        Final_Errors_Dict = self.__gen_dict_from_pars(self.__get_errors(log_samples, Final_Fit_Values_log),
+        Final_Errors_Dict = self.__gen_dict_from_pars(self.__get_errors(log_samples)[1],
                                                       constants_dict,
                                                       Par_List_Logs_errors,
                                                       [s + " error" for s in Global_List_Logs], list_ln_numbers)
@@ -651,31 +657,33 @@ class MCMC:
         priors = []
         for prior, peak in zip(prior_dict, peak_dict):
             if int(peak["l"]) == 0:
-                Priors_l0 = {"freq": 3, "power": 5 * scaling * prior["power perc error"] * 1000,
-                             "linewidth": 40 * prior["linewidth error"],
-                             "background": self.background_initial_guess/2, "asymmetry": 0.5}
+                Priors_l0 = {"freq": 3, "power": peak["power"],
+                             "linewidth": peak["linewidth"],
+                             "background": self.background_initial_guess, "asymmetry": 0.5}
                 priors.append(Priors_l0)
             elif int(prior["l"]) == 1:
                 Priors_l1 = {"freq": 3, "splitting": 0.4,
-                             "power": 5 * scaling * prior["power perc error"] * 1000,
-                             "linewidth": 40 * prior["linewidth error"], "background": self.background_initial_guess/2,
+                             "power": peak["power"],
+                             "linewidth": peak["linewidth"], "background": self.background_initial_guess,
                              "asymmetry": 0.5}
                 priors.append(Priors_l1)
             elif int(prior["l"]) == 2:
                 Priors_l2 = {"freq": 3, "splitting": 0.4,
-                             "power": 5 * scaling * prior["power perc error"] * 1000,
-                             "linewidth": 40 * prior["linewidth error"], "scale": scaling * 0.01,
-                             "background": self.background_initial_guess/2, "asymmetry": 0.5}
+                             "power": peak["power"],
+                             "linewidth": peak["linewidth"], "scale": scaling * 0.01,
+                             "background": self.background_initial_guess, "asymmetry": 0.5}
                 priors.append(Priors_l2)
 
             elif int(prior["l"]) == 3:
                 Priors_l3 = {"freq": 3, "splitting": 0.4,
-                             "power": 5 * scaling * prior["power perc error"] * 1000,
-                             "linewidth": 40 * prior["linewidth error"], "scale": scaling * 0.01,
-                             "background": self.background_initial_guess/2, "asymmetry": 0.5}
+                             "power": peak["power"],
+                             "linewidth": peak["linewidth"], "scale": scaling * 0.01,
+                             "background": self.background_initial_guess, "asymmetry": 0.5}
                 priors.append(Priors_l3)
 
         # check and correct if the prior range goes negative (for all but asymmetry which can be negative)
+        # if these are preventing your range going high enough then your initial priors need to be changed
+        # this can be a problem for linewidths which are quite different between VIRGO and BiSON
         for prior, peak in zip(priors, peak_dict):
             for key in prior:
                 if key in peak and "asymmetry" not in key:
@@ -965,16 +973,16 @@ class MCMC:
                 f.write("\n")
         return True
 
-    def __get_errors(self, samples, final_values):
+    def __get_errors(self, samples):
         """uses percentiles to get errors on the sample best values."""
         errors = []
         values = []
         for i in range(len(samples[0])):
             percs= np.percentile(samples[:, i], [16, 50, 84])
-            percs[1] = final_values[i]
+            values.append(percs[1])
             q = np.diff(percs)
             errors.append([q[0], q[1]])
-        return errors
+        return values, errors
 
     def __add_parameter_units(self, par_list, global_list, list_ln_numbers):
         """adds units to list of parameters this is so the plots have the right units.
