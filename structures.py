@@ -113,6 +113,8 @@ class Pair_Peaks:
 
     def set_fit_variables(self, par_list):
         i = 0
+        # par_list is a list of parameters in a specific order
+        # add variables that are only peak specific.
         for peak in self.peak_list:
             for parameter_field in fields(peak):
                 parameter = getattr(peak, parameter_field.name)
