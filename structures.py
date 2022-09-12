@@ -243,7 +243,6 @@ class Fit_Info:
 
 @dataclass
 class Run_Info:
-    number_of_processes = 3
     cadence = 60
     burnin = 1000
     no_samples = 10000
