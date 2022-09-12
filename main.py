@@ -12,7 +12,6 @@ from matplotlib import pyplot as plt
 from dataclasses import dataclass
 
 from import_data import import_data
-import import_priors
 import model
 from probability_functions import log_probability
 from structures import Peak_Structure as pk
@@ -31,7 +30,6 @@ data_year = 31536000/run_info.cadence
 power, freq = import_data(filename, 0, data_year, run_info.cadence)
 all_peaks = import_priors(priors_filename, run_info)
 peak_pairs = find_pairs(all_peaks)
-
 
 
 for peak_pair in peak_pairs:
@@ -60,9 +58,3 @@ for peak_pair in peak_pairs:
         save_output(samples, fit_info.par_labels, directory, fit_info, freq_peaks, power_peaks)
         del fit_info
         del sampler
-
-
-
-# To do
-# 1 Add identifier to file names
-# correct powers (currently input values are way too large)
