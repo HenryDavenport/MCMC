@@ -58,7 +58,7 @@ def create_corner_plot(samples, labels, directory, identifier, current_time):
     fig2 = corner.corner(
         samples, labels=labels_units
     )
-    fig2.savefig(f'{directory}/OUTPUT_corner_plot_{current_time}.jpg', dpi=40)
+    fig2.savefig(f'{directory}/OUTPUT_corner_plot_{current_time}.jpg', dpi=100)
     plt.close(fig2)
 
 
@@ -68,10 +68,14 @@ def save_output(samples, labels, directory, fit_info, freq, power):
     create_corner_plot(samples, labels, directory, identifier, current_time)
     values, lower_error, upper_error = get_value_and_errors(samples)
     fit_info.set_all_final_fit_variables(values, lower_error, upper_error)
-    # plt.plot(freq, power)
-    # plt.plot(freq, model.all_peaks_model(freq, fit_info))
-    # plt.show()
-    #
+
+    fig, ax = plt.subplots()
+
+    ax.plot(freq, power)
+    ax.plot(freq, model.all_peaks_model(freq, fit_info))
+    fig.savefig(f'{directory}/OUTPUT_graph_{current_time}.jpg', dpi=100)
+    plt.close(fig)
+
     write_to_file(fit_info, directory)
 
 def write_to_file(fit_info, directory):
