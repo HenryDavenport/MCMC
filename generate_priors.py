@@ -88,7 +88,7 @@ def correct_powers(peak_dict, freq, power, run_info):
 
     return peak_dict
 
-prior_peaks_list = correct_powers(prior_peaks_list, freq, power, run_info)
+# prior_peaks_list = correct_powers(prior_peaks_list, freq, power, run_info)
 print(prior_peaks_list)
 with open("priors.txt", "w") as f:
     for peak in prior_peaks_list:
