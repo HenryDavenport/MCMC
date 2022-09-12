@@ -16,7 +16,7 @@ def background(height):
 
 
 def all_peaks_model(freq, fit_info):
-    """returns the complete model with parameters given by input theta_dict"""
+    """returns the complete model with parameters given by input fit_info"""
     model = np.zeros(np.shape(freq))
 
     for peak_pair in fit_info.peak_pair_list:
