@@ -1,14 +1,21 @@
+""" structures.py
+Contains all the classes which define the way in which the fit information is stored and retrieved.
+"""
+
 from dataclasses import dataclass, field, fields
 from typing import List
 
 
 @dataclass
 class Parameter:
-    value: float
-    lower: float
-    upper: float
-    constant: bool
-    shared: bool
+    """ Class to define all variables for each fit parameter
+    e.g. one for Asymmetry, frequency, ln(power) etc"""
+    value: float  # expected value of parameter from priors
+    lower: float  # lower bound of value - sets lower bound on range explored by MCMC walker
+    upper: float  # upper bound of value - sets upper bound on range explored by MCMC walker
+    constant: bool  # boolean sets if this parameter is kept constant e.g. not fitted but set to value given as input
+    shared: bool  # boolean sets if same parameter value is fitted for neighbouring peak (e.g. within each l=0/2 and l=1/3 pair)
+
 
 @dataclass
 class Parameter_Fit_Info:
@@ -25,6 +32,8 @@ class Parameters_Fit_Info:
 
 @dataclass
 class Peak_Structure:
+    """ Class contains all the data about a particular peak.
+    Contains all parameters for a peak and the upper and lower bounds on the parameter values"""
     l: int
     n: int
     freq: Parameter
@@ -35,39 +44,65 @@ class Peak_Structure:
     m_scale: float
 
     def __init__(self, peak_dict, run_info):
+        """
+        Unpacks the prior values from the peak_dict and run_info and populates the structure above.
+        Also sets which parameter values are:
+        (a) constant/not fitted. These are just set to the prior value and not modified during the fit
+        (b) shared between pairs of peaks. For example the same asymmetry value is often fitted for pairs of peaks
+                in each l=0/2 and l=1/3 pair.
+
+        :param peak_dict: dictionary with all values and errors for the given peak (see below for field names)
+        :param Run_Info run_info: class containing global information about fit - e.g. scaling of m-split components
+        """
+
+        # set the l and n number of the peaks in the structure
         self.l = int(peak_dict["l"])
         self.n = int(peak_dict["n"])
+
+        # set the frequency parameter
         freq = Parameter(peak_dict["freq"], peak_dict["freq lower error"],
-                         peak_dict["freq upper error"], False, False)
+                         peak_dict["freq upper error"], constant=False, shared=False)
         self.freq = freq
 
+        # set splitting parameter
         if peak_dict["splitting"] == 0:
-            splitting = Parameter(peak_dict["splitting"], peak_dict["splitting lower error"],
-                                  peak_dict["splitting upper error"], True, False)
-            self.splitting = splitting
+            # if splitting = 0 in input then this parameter is not fitted so set to constant
+            kept_constant = True
         else:
-            splitting = Parameter(peak_dict["splitting"], peak_dict["splitting lower error"],
-                                  peak_dict["splitting upper error"], False, False)
-            self.splitting = splitting
+            # else splitting is fitted so not kept constant
+            kept_constant = False
+        splitting = Parameter(peak_dict["splitting"], peak_dict["splitting lower error"],
+                              peak_dict["splitting upper error"], constant=kept_constant, shared=False)
+        self.splitting = splitting
 
+        # set ln(linewidth) parameter
         ln_linewidth = Parameter(peak_dict["ln(width)"], peak_dict["ln(width) lower error"],
-                                 peak_dict["ln(width) upper error"], False, False)
+                                 peak_dict["ln(width) upper error"], constant=False, shared=False)
         self.ln_linewidth = ln_linewidth
 
+        # set ln(power) parameter
         ln_power = Parameter(peak_dict["ln(power)"], peak_dict["ln(power) lower error"],
-                              peak_dict["ln(power) upper error"], False, False)
+                              peak_dict["ln(power) upper error"], constant=False, shared=False)
         self.ln_power = ln_power
 
+        # set asymmetry parameter, note that the value of asymmetry is shared by both peaks in the pair
         asymmetry = Parameter(peak_dict["asymmetry"], peak_dict["asymmetry lower error"],
-                              peak_dict["asymmetry upper error"], False, True)
+                              peak_dict["asymmetry upper error"], constant=False, shared=True)
         self.asymmetry = asymmetry
 
+        # set the m component scaling depending on l value.
         if self.l == 2:
             self.m_scale = run_info.l2_m_scale
         else:
             self.m_scale = run_info.l3_m_scale
 
     def output_data(self):
+        """
+        Returns a list of all parameters values, upper and low bounds that are held in structure.
+        The list is in the order given by the order of the parameter fields shown above.
+
+        :return: list of all parameters values, upper and low bounds that are held in structure.
+        """
         output_list = []
         for parameter_field in fields(self):
             parameter = getattr(self, parameter_field.name)
@@ -82,13 +117,26 @@ class Peak_Structure:
 
 @dataclass
 class Pair_Peaks:
-    peak_list: List[Peak_Structure]
+    """ Data structure contains all fit parameter values for a pair of peaks.
+    Contains methods used to get and set fit parameters during the fitting."""
+    peak_list: List[Peak_Structure] # list of peak data, one Peak_Structure type for each peak.
 
     def get_fit_variables(self):
-        par_list = []
-        lower_list = []
-        upper_list = []
-        par_labels = []
+        """ Returns an array of parameter values for all parameters
+        that are to be fitted in the pair of peaks.
+        The parameters in the array are in the following order:
+            (a) First the parameters for each peak in turn which are both not constant and not shared between the peaks.
+                (shared means that the same parameter value is used for both peaks in the peak pair)
+            (b) Secondly all parameters which are both not constant and are shared between peaks in the peak pair.
+        This array is used to pass to the emcee library which requires the fit parameters to be in an array.
+        This order makes it easy to convert between this array and all the parameter values in the structure. """
+
+        par_list = []  # list of parameter values
+        lower_list = []  # list of lower bounds on parameter values
+        upper_list = []  # list of upper bounds on parameter values
+        par_labels = []  # list of parameter labels associated with the parameter values (used for graphs)
+
+        # first add parameters which are not shared between the peaks to the list
         for peak in self.peak_list:
             for parameter_field in fields(peak):
                 parameter = getattr(peak, parameter_field.name)
@@ -112,6 +160,19 @@ class Pair_Peaks:
         return par_list, lower_list, upper_list, par_labels
 
     def set_fit_variables(self, par_list):
+        """
+        Opposite to get_fit_variables.
+        Input is a list of parameter values in the order that is returned in get_fit_variables().
+        Sets all the parameter values in the peaks in the peak_list.
+        Returns the remaining parameter values in the par_list.
+        This is for two reasons:
+        Firstly it means multiple pairs of peaks can be fitted at once.
+        Secondly the background parameter value is stored in the Fit_Info type so must be returned to be stored there.
+
+        :param List[float] par_list: list of fit parameters
+        :return: Remaining parameter values in the par_list after setting all values for this pair of peaks.
+
+        """
         i = 0
         # par_list is a list of parameters in a specific order
         # add variables that are only peak specific.
@@ -136,6 +197,15 @@ class Pair_Peaks:
         return par_list[i:]
 
     def set_final_fit_variables(self, par_list, lower_list, upper_list):
+        """
+        Similar to set_fit_variables but now sets the lower and upper errors on all the fit parameters as well.
+        Used to store all the final fit parameters before the values and errors are output to file.
+
+        :param List[float] par_list: list of all fit parameters
+        :param List[float] lower_list: list of all fit parameter lower errors
+        :param List[float] upper_list: list of all fit parameter upper errors
+        :return: remaining fit information after setting all values in the pair of peaks
+        """
         i = 0
         for peak in self.peak_list:
             for parameter_field in fields(peak):
@@ -162,6 +232,11 @@ class Pair_Peaks:
         return par_list[i:], lower_list[i:], upper_list[i:]
 
     def output_data_peak(self):
+        """
+        returns all fit data - values, upper and lower errors in a list of lists.
+
+        :return: list of lists of all output data for each peak in the pair of peaks
+        """
         output_data = []
         for peak in self.peak_list:
             output_data.append(peak.output_data())
@@ -169,19 +244,28 @@ class Pair_Peaks:
 
 @dataclass
 class Fit_Info:
-    peak_pair_list: List[Pair_Peaks]
-    background: Parameter
-    fit_pars: List[float] = field(default_factory=list)
-    lower_prior: List[float] = field(default_factory=list)
-    upper_prior: List[float] = field(default_factory=list)
-    par_labels: List[str] = field(default_factory=list)
+    """ class for storing all information for a particular fit.
+    Used to generate the list of parameters which are varied in the fit.
+    """
+    peak_pair_list: List[Pair_Peaks]  # list of peak pairs involved in fit (if only fitting one pair per window then this list has one item)
+    background: Parameter  # background value for fit
+    fit_pars: List[float] = field(default_factory=list)  # list of all fit parameter values to pass to emcee
+    lower_prior: List[float] = field(default_factory=list)  # list of all lower bounds on par values - used to generate prior prob distribution
+    upper_prior: List[float] = field(default_factory=list)  # list of all upper bounds on par values - used to generate prior prob distribution
+    par_labels: List[str] = field(default_factory=list)  # list of all parameter labels
 
-    l1_visibility: float = 1.505
-    l2_visibility:  float = 0.62
-    l3_visibility:  float = 0.075
-
+    def __init__(self, peak_pair_list, background):
+        self.peak_pair_list = peak_pair_list
+        self.background = background
+        self.get_all_fit_variables()
 
     def get_all_fit_variables(self):
+        """ generates the list of the values of the parameters for all parameters that need to be fitted.
+        This list is passed to the emcee code.
+        Generates list of parameter names (in order to generate corner plots) stored in par_labels
+        Generates lists of upper and lower bounds of the fit values, these are used to generate the uniform priors for
+        the emcee walkers as well the initial parameter values for the walkers.
+        :return list of fit parameters """
         self.fit_pars = []
         self.lower_prior = []
         self.upper_prior = []
@@ -201,12 +285,28 @@ class Fit_Info:
         return self.fit_pars
 
     def set_all_fit_variables(self, par_list):
+        """
+        given new list of parameter values (from the emcee walkers) sets all the appropriate values in
+        the peaks in peak_pair_list
+        :param List[float] par_list: list of all fit parameter values
+        :return:
+        """
         for peak_pair in self.peak_pair_list:
             par_list = peak_pair.set_fit_variables(par_list)
         if not self.background.constant:
             self.background.value = par_list[0]
 
     def set_all_final_fit_variables(self, par_list, lower_list, upper_list):
+        """
+        Used after emcee code has run and the final values and lower and upper errors have been found.
+        This populates the peaks in peak_pair_list with all the final values in order to make it easy to
+        generate the output final with all output values in.
+
+        :param List[float] par_list: list of final fit parameter values
+        :param List[float] lower_list: list of all lower errors on fit parameter values
+        :param List[float] upper_list: list of all upper errors on fit parameter values
+        :return:
+        """
         for peak_pair in self.peak_pair_list:
             par_list, lower_list, upper_list = peak_pair.set_final_fit_variables(par_list, lower_list, upper_list)
         if not self.background.constant:
@@ -218,6 +318,11 @@ class Fit_Info:
             self.background.upper = upper_list[0]
 
     def output(self):
+        """
+        Generate a list of the parameter values and errors for each peak in peak_pair_list
+        which are written to a .txt file.
+        :return: list of parameter values and errors
+        """
         lines = []
         for peak_pair in self.peak_pair_list:
             output_lines = peak_pair.output_data_peak()
@@ -234,33 +339,11 @@ class Fit_Info:
         return lines
 
     def freq_range(self):
+        """
+        :return: the frequency in the priors for each peak in peak_pair_list
+        """
         freqs = []
         for peak_pair in self.peak_pair_list:
             for peak in peak_pair.peak_list:
                 freqs.append(peak.freq.value)
         return freqs
-
-
-@dataclass
-class Run_Info:
-    cadence = 60
-    burnin = 1000
-    no_samples = 10000
-    nwalkers = 20
-
-    # the ratios of the heights of the m split components of the l=2 and l=3 modes
-    l2_m_scale = 0.634
-    l3_m_scale = 0.400
-    # the mode visibilities
-    l1_visibility = 1.505
-    l2_visibility = 0.62
-    l3_visibility = 0.075
-    window_width = 25
-    lower_range = 2000
-    upper_range = 4000
-
-    save_middle_peak_parameters_only = False
-    # the guess of the background
-    background: Parameter
-    # set to display the initial positions of all the walkers each peak run.
-    check_priors = False
