@@ -1,3 +1,6 @@
+"""
+Imports the time series data (i.e. from GOLF, BiSON etc.) and returns the FT of it
+"""
 from astropy.io import fits
 import math
 import numpy as np
@@ -5,7 +8,16 @@ import matplotlib.pyplot as plt
 
 
 def import_data(filename, start, end, cad):
-    """imports data and returns the power and frequency arrays"""
+    """
+    Imports data from file and takes range within the datapoint indices given by start and end parameters.
+    Returns the FT of the time series data within that range.
+
+    :param filename: name of file with extension .fit that contains data
+    :param start: The starting index in the data you want to fit (i.e. corresponds to a starting time)
+    :param end: The end index of the range in which you want to fit the data
+    :param cad: The cadence of the data collection (in seconds) e.g. 60 seconds for GOLF
+    :return: power and frequency arrays for fitting
+    """
     with fits.open(filename) as hdul:
         hdr = hdul[0].header
         data = hdul[0].data
@@ -25,7 +37,16 @@ def import_data(filename, start, end, cad):
     return power, freq
 
 def import_data_window(filename, start, end, cad):
-    """imports data and returns the power and frequency arrays"""
+    """
+    Modified version of import_data for use if the time series has gaps in it. (e.g. for BiSON).
+    This code hasn't been tested so may not work!
+
+    :param filename:
+    :param start:
+    :param end:
+    :param cad:
+    :return:
+    """
     with fits.open(filename) as hdul:
         hdr = hdul[0].header
         data = hdul[0].data
@@ -39,8 +60,6 @@ def import_data_window(filename, start, end, cad):
 
     npts = len(vel)
     time2 = np.arange(0, npts * cad, cad)
-    # plt.plot(time2, vel)
-    # plt.show()
 
     window_fun = create_window_function(vel)
     powWin = abs(np.fft.rfft(window_fun)) ** 2
@@ -52,5 +71,6 @@ def import_data_window(filename, start, end, cad):
     return power, freq, powWin
 
 def create_window_function(vel_data):
+    """ creates function with 1.0 if data was measured and 0.0 if not  """
     window_function = [0.0 if i == 0.0 else 1.0 for i in vel_data]
     return window_function
