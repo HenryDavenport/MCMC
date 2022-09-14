@@ -234,16 +234,26 @@ class Fit_Info:
     """ class for storing all information for a particular fit.
     Used to generate the list of parameters which are varied in the fit.
     """
+    # parameters that are set when the class is initialised
     peak_pair_list: List[Pair_Peaks]  # list of peak pairs involved in fit (if only fitting one pair per window then this list has one item)
     background: Parameter  # background value for fit
+    l1_visibility: float
+    l2_visibility: float
+    l3_visibility: float
+
+    # parameters that can be left without values when the class is initialised
     fit_pars: List[float] = field(default_factory=list)  # list of all fit parameter values to pass to emcee
     lower_prior: List[float] = field(default_factory=list)  # list of all lower bounds on par values - used to generate prior prob distribution
     upper_prior: List[float] = field(default_factory=list)  # list of all upper bounds on par values - used to generate prior prob distribution
     par_labels: List[str] = field(default_factory=list)  # list of all parameter labels
 
-    def __init__(self, peak_pair_list, background):
+    def __init__(self, peak_pair_list, background, visibilities):
         self.peak_pair_list = peak_pair_list
         self.background = background
+        self.l1_visibility = visibilities[0]
+        self.l2_visibility = visibilities[1]
+        self.l3_visibility = visibilities[2]
+
         self.get_all_fit_variables()
 
     def get_all_fit_variables(self):
@@ -297,9 +307,6 @@ class Fit_Info:
         for peak_pair in self.peak_pair_list:
             par_list, lower_list, upper_list = peak_pair.set_final_fit_variables(par_list, lower_list, upper_list)
         if not self.background.constant:
-            print(par_list)
-            print(lower_list)
-            print(upper_list)
             self.background.value = par_list[0]
             self.background.lower = lower_list[0]
             self.background.upper = upper_list[0]
