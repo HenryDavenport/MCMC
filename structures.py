@@ -18,19 +18,6 @@ class Parameter:
 
 
 @dataclass
-class Parameter_Fit_Info:
-    constant: bool
-    shared: bool
-
-@dataclass
-class Parameters_Fit_Info:
-    freq: Parameter_Fit_Info
-    splitting: Parameter_Fit_Info
-    ln_linewidth: Parameter_Fit_Info
-    ln_power: Parameter_Fit_Info
-    asymmetry: Parameter_Fit_Info
-
-@dataclass
 class Peak_Structure:
     """ Class contains all the data about a particular peak.
     Contains all parameters for a peak and the upper and lower bounds on the parameter values"""
