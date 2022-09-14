@@ -12,17 +12,20 @@ class Run_Settings:
     """
 
     cadence = 60  # in seconds the time between data point collection in the time series
-    burnin = 100  # the number of samples used to initialise the walkers
-    no_samples = 1000  # the total number of samples taken of the parameter space
+    burnin = 500  # the number of samples used to initialise the walkers
+    no_samples = 2000  # the total number of samples taken of the parameter space
     nwalkers = 20  # the number of walkers used by the emcee fit to explore the parameter space
 
     # the ratios of the heights of the m split components of the l=2 and l=3 modes
     l2_m_scale = 0.634
     l3_m_scale = 0.400
+
     # the mode visibilities
     l1_visibility = 1.505
     l2_visibility = 0.62
     l3_visibility = 0.075
+
+    visibilities = [l1_visibility, l2_visibility, l3_visibility]
 
     # the width of the fit window in micro-Hz.
     # This is the width above and below the expected frequencies of the peaks being fitted.
