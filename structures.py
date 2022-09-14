@@ -333,4 +333,5 @@ class Fit_Info:
         for peak_pair in self.peak_pair_list:
             for peak in peak_pair.peak_list:
                 freqs.append(peak.freq.value)
+        freqs.sort()
         return freqs
