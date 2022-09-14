@@ -24,11 +24,13 @@ from import_priors import import_priors, find_pairs
 from initialise_walker_positions import walker_pos
 from output import create_directory, save_output
 
-# Set the range of values for the background of the fits.
+# Set the range of values explored for the background of the fits.
 # The lower and upper bounds set the range of values explored by the MCMC walkers.
 lower_bound_background = 0
+expected_background_value = 50000 # the approximate expected value of the background in the fit
 upper_bound_background = 100000
-background = Parameter(50000, 0, 100000, False, False)
+background = Parameter(expected_background_value, lower_bound_background, upper_bound_background,
+                       constant=False, shared=False)
 
 # run_settings is a structure which contains settings for the fits
 # i.e. not just information about one particular pair of peaks
@@ -49,8 +51,8 @@ priors_filename = "priors.txt"
 
 # Example: import 1 years data and FFT the data
 no_datapoints_for_year = 31536000 / run_settings.cadence
-start_year = 0 # start year from beginning of data for fit
-end_year = 1 # end year from beginning of data for fit
+start_year = 0  # start year from beginning of data for fit
+end_year = 1  # end year from beginning of data for fit
 
 # set the range of datapoints in the time series based on the start and end year
 start_year_index = start_year*no_datapoints_for_year # starting datapoint index
@@ -85,7 +87,6 @@ for peak_pair in peak_pairs:
         # SELECT THE FREQUENCY RANGE OVER WHICH THE POWER ARRAY IS FITTED
 
         # ensures the peaks in the array are in increasing frequency order
-        peak_freqs.sort() # TODO add to constructor
         lowest_freq = peak_freqs[0] - run_settings.window_width # lowest bound in frequency of fit window
         highest_freq = peak_freqs[-1] + run_settings.window_width # top bound in frequency of fit window
         lowest_freq_index = np.argmax(freq > lowest_freq)
