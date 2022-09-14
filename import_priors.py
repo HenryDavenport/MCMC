@@ -1,85 +1,78 @@
+"""
+import_priors.py
+Contains functions to import the values from the priors file.
+These consist of both expected values of parameters as well as the desired ranges that you want the MCMC
+code to explore.
+Function import_priors() is the main function which generates an instance of the Peak_Structure class
+for each peak and fills in all the values from the priors.
+"""
 import numpy as np
-from structures import Peak_Structure as peak_struc
-from structures import Pair_Peaks as pair_peaks_struc
+from structures import Peak_Structure
+from structures import Pair_Peaks
 
-from typing import List
 
-# functions used to process the input data and change its format (dictionary to list of input parameters etc)
+def import_priors(location, run_settings):
+    """
+    Load prior values from file location and identify each column using the column_titles.
+    Returns the prior parameters in a list of the generated instances of the Peak_Structure class.
+    With one instance of the class per peak which stores all the relevant information about the peak.
+    :param location: file location for priors file
+    :param run_settings: instance of class Run_Settings, con
+    :return: list of instances of Peak_Structure class with prior parameters for each peak.
+    """
+
+    # import priors from file as a list of lists (one row for each peak)
+    input_priors = np.loadtxt(location)
+
+    # titles of columns for the prior file.
+    column_titles = ["l", "n", "freq", "freq lower error", "freq upper error", "splitting",
+                     "splitting lower error", "splitting upper error", "ln(width)", "ln(width) lower error",
+                     "ln(width) upper error", "ln(power)", "ln(power) lower error", "ln(power) upper error",
+                     "asymmetry", "asymmetry lower error", "asymmetry upper error"]
+
+    # function converts the input_priors which is in a matrix to list of instances of Peak_Structure class.
+    all_peaks = gen_peak_structs(input_priors, run_settings, column_titles)
+    return all_peaks
+
+
+
 def gen_peak_structs(input_data, run_info, template):
-    """ takes in input data from file (as a list of lists) and a template which gives a label to each element.
-    generates a dictionary of elements"""
+    """
+    takes in input data from file (as a list of lists/matrix)
+    and a template which gives a label to each element.
+
+    :param input_data: matrix of input data from priors file
+    :param run_info: instance of Run_Info class used to generate all information about the peaks.
+    :param template: the list of column titles for the priors file
+    :return: returns list of instances of the Peak_Structure class with one per peak.
+    Each contains all required information for a peak.
+    """
     all_peaks = []
     for row in input_data:
         peak_dict = dict(zip(template, row))
-        peak = peak_struc(peak_dict, run_info)
+        peak = Peak_Structure(peak_dict, run_info)
         all_peaks.append(peak)
     return all_peaks
 
 
-def import_priors(location, run_info):
-    """imports priors from file location from table with columns given by column_titles
-    returns a list of the l and n numbers in the priors and a list of dictionaries of the data for each peak"""
-    # import priors from file as a list of lists (one row for each peak)
-    input_priors = np.loadtxt(location)
-    column_titles = ["l", "n", "freq", "freq lower error", "freq upper error", "splitting",
-                            "splitting lower error",
-                            "splitting upper error", "ln(width)", "ln(width) lower error", "ln(width) upper error",
-                            "ln(power)", "ln(power) lower error", "ln(power) upper error", "asymmetry",
-                            "asymmetry lower error", "asymmetry upper error"]
-    pk = peak_struc
-
-    # add extra data for scale height of m split components
-    # input_data_proc = []
-    # for peak in input_priors:
-    #     if peak[0] == 2.0:
-    #         peak = np.append(peak, self.l2_m_scale)
-    #     if peak[0] == 3.0:
-    #         peak = np.append(peak, self.l3_m_scale)
-    #     else:
-    #         peak = np.append(peak, 0)
-    #     input_data_proc.append(peak)
-    # input_priors = input_data_proc
-
-    all_peaks = gen_peak_structs(input_priors, run_info, column_titles)
-
-    # MOVE TO generate priors?
-    # # PROCESS INPUT PRIOR DATA, e.g. propagate any errors required
-    # # need to convert errors in ln(width) and ln(power) to errors in width and power
-    # for i in range(len(list_ln_values)):
-    #     prior_peaks_list[i]["linewidth"] = np.exp(prior_peaks_list[i]["ln(width)"])
-    #     prior_peaks_list[i]["linewidth error"] = abs(
-    #         np.exp(prior_peaks_list[i]["ln(width)"] + prior_peaks_list[i]["ln(width) error"]) - np.exp(
-    #             prior_peaks_list[i]["ln(width)"]))
-    #
-    #     # if virgo make it wider as linewidths a lot wider than for BiSON
-    #     prior_peaks_list[i]["linewidth"] *= 5
-    #
-    #     # generate power errors
-    #     prior_peaks_list[i]["power"] = np.exp(prior_peaks_list[i]["ln(power)"])
-    #     prior_peaks_list[i]["power perc error"] = 100 * abs(
-    #         np.exp(prior_peaks_list[i]["ln(power)"] + prior_peaks_list[i]["ln(power) error"])
-    #         - np.exp(prior_peaks_list[i]["ln(power)"])) / prior_peaks_list[i]["power"]
-    #
-    #     # if virgo make it wider as linewidths a lot wider than for BiSON
-    #     prior_peaks_list[i]["power"] *= 5
-
-    return all_peaks
-
-
 def find_pairs(all_peaks):
-    """need to pair up the sets of l and n numbers to the ones close to each other. These pairs will be fitted together.
-    e.g. l=0 n=N, l=2 n=N-1 and l=1 n=N, l=3 n=N-1"""
+    """
+    finds the pairs of peaks which are next to each other (e.g. the l=0/2 and l=1/3 pairs)
+    e.g. l=0 n=N, l=2 n=N-1 and l=1 n=N, l=3 n=N-1
+    :param all_peaks: a list of all peaks
+    :return: a list of lists which contain each pair of peaks
+    """
     pair_list = []
     for peak1 in all_peaks:
         if peak1.l == 0:
             for peak2 in all_peaks:
                 if (peak2.l == 2) and (peak2.n == (peak1.n - 1)):
-                    pair_peaks = pair_peaks_struc([peak1, peak2])
+                    pair_peaks = Pair_Peaks([peak1, peak2])
                     pair_list.append(pair_peaks)
         if peak1.l == 1:
             for peak2 in all_peaks:
                 if (peak2.l == 3) and (peak2.n == (peak1.n - 1)):
-                    pair_peaks = pair_peaks_struc([peak1, peak2])
+                    pair_peaks = Pair_Peaks([peak1, peak2])
                     pair_list.append(pair_peaks)
 
     return pair_list
