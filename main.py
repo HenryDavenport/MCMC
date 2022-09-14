@@ -27,7 +27,7 @@ from output import create_directory, save_output
 # Set the range of values explored for the background of the fits.
 # The lower and upper bounds set the range of values explored by the MCMC walkers.
 lower_bound_background = 0
-expected_background_value = 50000 # the approximate expected value of the background in the fit
+expected_background_value = 50000  # the approximate expected value of the background in the fit
 upper_bound_background = 100000
 background = Parameter(expected_background_value, lower_bound_background, upper_bound_background,
                        constant=False, shared=False)
@@ -74,7 +74,8 @@ for peak_pair in peak_pairs:
     # fit_info contains all the priors information for a fit of a pair of peaks
     # this includes information about the pair of peaks and the background
     background_prior = copy.deepcopy(run_settings.background) # deep copy stops past fits changing future background priors
-    fit_info = Fit_Info(peak_pair_list=[peak_pair], background = background_prior)
+    fit_info = Fit_Info(peak_pair_list=[peak_pair], background = background_prior,
+                        visibilities=run_settings.visibilities)
 
     # read the expected frequencies of the peaks (these come from the priors)
     peak_freqs = fit_info.freq_range()
