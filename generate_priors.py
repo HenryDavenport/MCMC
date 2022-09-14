@@ -1,15 +1,25 @@
+"""
+generate_priors.py
+import data from a previous fit for use in creating the prior probability distributions for each parameter.
+"""
 import numpy as np
+from structures import Parameter
+from run_settings import Run_Settings
 from import_data import import_data
-from structures import Run_Info, Fit_Info, Parameter
 
 Input_Priors_Columns = ["l", "n", "freq", "freq error", "splitting", "splitting error", "ln(width)",
                         "ln(width) error", "ln(power)", "ln(power) error", "asymmetry", "asymmetry error",
                         "background", "background error", "scale"]
 
-# functions used to process the input data and change its format (dictionary to list of input parameters etc)
 def gen_input_dict(input_data, template):
-    """ takes in input data from file (as a list of lists) and a template which gives a label to each element.
-    generates a dictionary of elements"""
+    """
+    takes in input data from file (as a matrix/list of lists) and a template which gives a label to each element.
+    generates a dictionary of elements
+    :param input_data: matrix of all prior data
+    :param template: the column titles for the data in input_data
+    :return: list of the l and n numbers in the priors data, list of dictionaries with all data matched up with
+    labels e.g. "asymmetry".
+    """
     total_dict = []
     list_ln = []
     for peak in input_data:
@@ -17,48 +27,6 @@ def gen_input_dict(input_data, template):
         list_ln.append([int(peak_dict["l"]), int(peak_dict["n"])])
         total_dict.append(peak_dict)
     return list_ln, total_dict
-
-def import_priors(location, column_titles):
-    """imports priors from file location from table with columns given by column_titles
-    returns a list of the l and n numbers in the priors and a list of dictionaries of the data for each peak"""
-    # import priors from file as a list of lists (one row for each peak)
-    input_priors = np.loadtxt(location)
-
-
-    list_ln_values, prior_peaks_list = gen_input_dict(input_priors, column_titles)
-
-    # PROCESS INPUT PRIOR DATA, e.g. propagate any errors required
-    # need to convert errors in ln(width) and ln(power) to errors in width and power
-    for i in range(len(list_ln_values)):
-        prior_peaks_list[i]["linewidth"] = np.exp(prior_peaks_list[i]["ln(width)"])
-        prior_peaks_list[i]["linewidth error"] = abs(
-            np.exp(prior_peaks_list[i]["ln(width)"] + prior_peaks_list[i]["ln(width) error"]) - np.exp(
-                prior_peaks_list[i]["ln(width)"]))
-
-        # if virgo make it wider as linewidths a lot wider than for BiSON
-        prior_peaks_list[i]["linewidth"] *= 5
-
-        # generate power errors
-        prior_peaks_list[i]["power"] = np.exp(prior_peaks_list[i]["ln(power)"])
-        prior_peaks_list[i]["power perc error"] = 100 * abs(
-            np.exp(prior_peaks_list[i]["ln(power)"] + prior_peaks_list[i]["ln(power) error"])
-            - np.exp(prior_peaks_list[i]["ln(power)"])) / prior_peaks_list[i]["power"]
-
-        # if virgo make it wider as linewidths a lot wider than for BiSON
-        prior_peaks_list[i]["power"] *= 5
-
-    return list_ln_values, prior_peaks_list
-
-location = "Main_Fits_BiSON_8640d_lbest_UseInSolarCycle.dat"
-input_priors = np.loadtxt(location)
-list_ln_values, prior_peaks_list = gen_input_dict(input_priors, Input_Priors_Columns)
-
-background = Parameter(50000, 0, 100000, False, False)
-run_info = Run_Info(background)
-filename = "GOLF_bw_rw_pm3_960411_200830_Sync_RW_dt60F_v1.fits"
-data_year = 31536000/run_info.cadence
-power, freq = import_data(filename, 0, data_year, run_info.cadence)
-
 
 def correct_powers(peak_dict, freq, power, run_info):
     """normalisation varies a lot between different data sets. This function finds the average height in a
@@ -88,11 +56,30 @@ def correct_powers(peak_dict, freq, power, run_info):
 
     return peak_dict
 
-# prior_peaks_list = correct_powers(prior_peaks_list, freq, power, run_info)
+# the data from a previous fit
+location = "Main_Fits_BiSON_8640d_lbest_UseInSolarCycle.dat"
+input_priors = np.loadtxt(location)
+# get all information from priors file into list of dictionaries - one for each peak (prior_peaks_list)
+list_ln_values, prior_peaks_list = gen_input_dict(input_priors, Input_Priors_Columns)
+
+
+background = Parameter(50000, 0, 100000, False, False)
+run_info = Run_Settings(background)
+
+# only need if correct_powers is required i.e. if the powers in the BiSON data are very different to
+# powers in the data you want to fit e.g. GOLF data
+filename = "GOLF_bw_rw_pm3_960411_200830_Sync_RW_dt60F_v1.fits"
+data_year = 31536000/run_info.cadence
+power, freq = import_data(filename, 0, data_year, run_info.cadence)
+prior_peaks_list = correct_powers(prior_peaks_list, freq, power, run_info)
+
 print(prior_peaks_list)
 with open("priors.txt", "w") as f:
     for peak in prior_peaks_list:
         line = []
+
+        # multipliers are for widening the width of the priors explored by the walkers beyond
+        # what previous fit found to be 1 std deviation.
         multiplier1 = 40
         multiplier2 = 20
         multiplier3 = 20
@@ -101,18 +88,27 @@ with open("priors.txt", "w") as f:
 
         line.append(str(peak["l"])+"\t")
         line.append(str(peak["n"])+"\t")
+
         line.append(str(peak["freq"])+"\t")
         line.append(str(peak["freq"]-multiplier1*peak["freq error"])+"\t")
         line.append(str(peak["freq"]+multiplier1*peak["freq error"])+"\t")
+
         line.append(str(peak["splitting"]) + "\t")
-        line.append(str(peak["splitting"] - multiplier2*peak["splitting error"]) + "\t")
+        # splitting must be positive
+        if (peak["splitting"] - multiplier2*peak["splitting error"]) < 0.0:
+            line.append(str(0.0) + "\t")
+        else:
+            line.append(str(peak["splitting"] - multiplier2 * peak["splitting error"]) + "\t")
         line.append(str(peak["splitting"] + multiplier2*peak["splitting error"]) + "\t")
+
         line.append(str(peak["ln(width)"]) + "\t")
         line.append(str(peak["ln(width)"] - multiplier3*peak["ln(width) error"]) + "\t")
         line.append(str(peak["ln(width)"] + multiplier3*peak["ln(width) error"]) + "\t")
+
         line.append(str(peak["ln(power)"]) + "\t")
         line.append(str(peak["ln(power)"] - multiplier4*peak["ln(power) error"]) + "\t")
         line.append(str(peak["ln(power)"] + multiplier4*peak["ln(power) error"]) + "\t")
+
         line.append(str(peak["asymmetry"]) + "\t")
         line.append(str(peak["asymmetry"] - multiplier5*peak["asymmetry error"]) + "\t")
         line.append(str(peak["asymmetry"] + multiplier5*peak["asymmetry error"]) + "\t")
