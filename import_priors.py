@@ -36,21 +36,22 @@ def import_priors(location, run_settings):
 
 
 
-def gen_peak_structs(input_data, run_info, template):
+def gen_peak_structs(input_data, run_settings, template):
     """
     takes in input data from file (as a list of lists/matrix)
-    and a template which gives a label to each element.
+    and a template labels each column of the matrix e.g "asymmetry" etc.
+    Unpacks these values and puts them into one instance of the Peak_Structure class per peak.
+    Returns a list of these classes.
 
     :param input_data: matrix of input data from priors file
-    :param run_info: instance of Run_Info class used to generate all information about the peaks.
+    :param run_settings: instance of Run_Settings class containing peak information.
     :param template: the list of column titles for the priors file
-    :return: returns list of instances of the Peak_Structure class with one per peak.
-    Each contains all required information for a peak.
+    :return: returns list of instances of the Peak_Structure class with one per peak. Each contains all required information for a peak.
     """
     all_peaks = []
     for row in input_data:
         peak_dict = dict(zip(template, row))
-        peak = Peak_Structure(peak_dict, run_info)
+        peak = Peak_Structure(peak_dict, run_settings)
         all_peaks.append(peak)
     return all_peaks
 
