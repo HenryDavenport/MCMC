@@ -26,6 +26,8 @@ run_settings = Run_Settings
 
 # convert the matrix into the right format (List[Pair_Peaks])
 list_peaks = gen_peak_structs(all_data, run_settings, column_titles)
+
+# plot only first 2 peaks in the list
 pair_peak = Pair_Peaks(list_peaks[:2])
 
 # add the background values to a Parameter in order to add to the Fit_Info class
@@ -40,8 +42,10 @@ fit_info = Fit_Info(peak_pair_list=[pair_peak], background = background,
                     visibilities = run_settings.visibilities)
 
 # frequency array
-freq = np.linspace(2000, 2500, 10000)
+freq = np.linspace(2065, 2110, 10000)
 
 fig, ax = plt.subplots()
 ax.plot(freq, all_peaks_model(freq, fit_info))
+ax.set_xlabel("Frequency [$\mu$ Hz]")
+ax.set_ylabel("Power")
 plt.show()
